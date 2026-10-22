@@ -2,13 +2,44 @@
 require("dotenv").config();
 
 const express = require("express");
+const session = require("express-session");
+const PgSession = require("connect-pg-simple")(session);
+
 const pool = require("./db");
+const authRoutes = require("./auth");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(express.json());
+if (!process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET is required");
+}
 
+app.disable("x-powered-by");
+
+app.use(express.json({ limit: "20kb" }));
+
+// Store login sessions in PostgreSQL.
+app.use(
+  session({
+    name: "trustvault.sid",
+    store: new PgSession({
+      pool,
+      tableName: "user_sessions"
+    }),
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 60 * 60 * 1000
+    }
+  })
+);
+
+// Check whether the backend is running.
 app.get("/api/health", (req, res) => {
   res.json({
     message: "TrustVault backend is running",
@@ -16,24 +47,8 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.get("/api/db-test", async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT current_database() AS database, NOW() AS time"
-    );
-
-    res.json({
-      message: "PostgreSQL connected successfully",
-      result: result.rows[0]
-    });
-  } catch (error) {
-    console.error("Database connection error:", error.message);
-
-    res.status(500).json({
-      error: "Database connection failed"
-    });
-  }
-});
+// Authentication routes.
+app.use("/api/auth", authRoutes);
 
 app.listen(PORT, () => {
   console.log(`TrustVault server running on port ${PORT}`);
