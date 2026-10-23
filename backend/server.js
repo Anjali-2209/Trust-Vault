@@ -8,6 +8,7 @@ const PgSession = require("connect-pg-simple")(session);
 const pool = require("./db");
 const authRoutes = require("./auth");
 const documentRoutes = require("./documents");
+const adminRoutes = require("./admin");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -50,6 +51,10 @@ app.get("/api/health", (req, res) => {
 // Authentication routes.
 app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
+app.use("/api/admin", adminRoutes);
+if(require.main=== module){
 app.listen(PORT, () => {
   console.log(`TrustVault server running on port ${PORT}`);
 });
+}
+module.exports=app;
