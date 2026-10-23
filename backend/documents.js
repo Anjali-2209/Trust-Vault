@@ -306,48 +306,94 @@ router.get("/:id", async (req, res) => {
 });
 
 // GET /api/documents/:id/download
+
+// GET /api/documents/:id/download
 router.get("/:id/download", async (req, res) => {
   try {
     if (!validId(req.params.id)) {
-      return res.status(400).json({ error: "Invalid document ID" });
+      return res.status(400).json({
+        error: "Invalid document ID"
+      });
     }
 
     const user = await currentUser(req);
+
     if (!user) {
-      return res.status(401).json({ error: "Login required" });
+      return res.status(401).json({
+        error: "Login required"
+      });
     }
 
-    const document = await documentAccess(req.params.id, user.id);
-
-    if (!document || !canRead(document, user.id)) {
-      await audit(user.id, req.params.id, "download", "denied");
-      return res.status(403).json({ error: "Access denied" });
-    }
-
+    // Check permission and retrieve file contents in one query.
+    // The query only returns data if this user currently has access.
     const result = await pool.query(
-      "SELECT file_data FROM documents WHERE id = $1",
-      [document.id]
+      `SELECT
+         d.id,
+         d.filename,
+         d.file_data
+       FROM documents d
+       WHERE d.id = $1
+         AND (
+           d.owner_id = $2
+           OR EXISTS (
+             SELECT 1
+             FROM document_permissions p
+             WHERE p.document_id = d.id
+               AND p.user_id = $2
+               AND p.permission IN ('read', 'edit')
+           )
+         )`,
+      [req.params.id, user.id]
     );
 
-    if (!result.rows.length) {
-      return res.status(404).json({ error: "Document not found" });
+    const document = result.rows[0];
+
+    if (!document) {
+      await audit(
+        user.id,
+        req.params.id,
+        "download",
+        "denied"
+      );
+
+      return res.status(403).json({
+        error: "Access denied"
+      });
     }
 
-    await audit(user.id, document.id, "download", "allowed");
+    await audit(
+      user.id,
+      document.id,
+      "download",
+      "allowed"
+    );
 
-    res.setHeader("Content-Type", "application/octet-stream");
-    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader(
+      "Content-Type",
+      "application/octet-stream"
+    );
+
+    res.setHeader(
+      "X-Content-Type-Options",
+      "nosniff"
+    );
+
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${safeFilename(document.filename)}"`
     );
 
-    return res.send(result.rows[0].file_data);
+    return res.send(document.file_data);
   } catch (error) {
     console.error("Download error:", error);
-    return res.status(500).json({ error: "Download failed" });
+
+    return res.status(500).json({
+      error: "Download failed"
+    });
   }
 });
+
+
 
 // PUT /api/documents/:id
 // Change category (requires edit permission).

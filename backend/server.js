@@ -4,21 +4,60 @@ require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
 const PgSession = require("connect-pg-simple")(session);
+const helmet = require("helmet");
+const { rateLimit } = require("express-rate-limit");
 
 const pool = require("./db");
 const authRoutes = require("./auth");
 const documentRoutes = require("./documents");
 const adminRoutes = require("./admin");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === "production";
 
 if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET is required");
 }
 
+if (isProduction && !process.env.APP_ORIGIN) {
+  throw new Error("APP_ORIGIN is required in production");
+}
+
 app.disable("x-powered-by");
 
+// Trust the first reverse proxy in production.
+// Configure this to match the actual deployment topology.
+if (isProduction) {
+  app.set("trust proxy", 1);
+}
+
+// Add security-related response headers.
+app.use(helmet());
+
+// Limit JSON request body size.
 app.use(express.json({ limit: "20kb" }));
+
+// Check the origin of requests that can change data.
+// This is an additional CSRF defense alongside SameSite cookies.
+app.use((req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    return next();
+  }
+
+  const origin = req.get("Origin");
+  const allowedOrigin = isProduction
+    ? process.env.APP_ORIGIN
+    : "http://localhost:5173";
+
+  if (origin && origin !== allowedOrigin) {
+    return res.status(403).json({
+      error: "Request origin not allowed"
+    });
+  }
+
+  next();
+});
 
 // Store login sessions in PostgreSQL.
 app.use(
@@ -33,14 +72,36 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isProduction,
       sameSite: "strict",
       maxAge: 60 * 60 * 1000
     }
   })
 );
 
-// Check whether the backend is running.
+// Limit repeated login attempts.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: {
+    error: "Too many login attempts. Please try again later."
+  }
+});
+
+// Limit automated registration attempts.
+const registrationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: {
+    error: "Too many registrations. Please try again later."
+  }
+});
+
+// Health check.
 app.get("/api/health", (req, res) => {
   res.json({
     message: "TrustVault backend is running",
@@ -48,13 +109,19 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Authentication routes.
+// Authentication and document routes.
+app.use("/api/auth/login", loginLimiter);
+app.use("/api/auth/register", registrationLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/admin", adminRoutes);
-if(require.main=== module){
-app.listen(PORT, () => {
-  console.log(`TrustVault server running on port ${PORT}`);
-});
+
+// Start the server only when this file is run directly.
+// This allows Vitest and Supertest to import the app.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`TrustVault server running on port ${PORT}`);
+  });
 }
-module.exports=app;
+
+module.exports = app;
