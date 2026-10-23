@@ -6,6 +6,8 @@ const session = require("express-session");
 const PgSession = require("connect-pg-simple")(session);
 const helmet = require("helmet");
 const { rateLimit } = require("express-rate-limit");
+const path = require("path");
+const fs = require("fs");
 
 const pool = require("./db");
 const authRoutes = require("./auth");
@@ -26,26 +28,21 @@ if (isProduction && !process.env.APP_ORIGIN) {
 
 app.disable("x-powered-by");
 
-// Trust the first reverse proxy in production.
-// Configure this to match the actual deployment topology.
 if (isProduction) {
   app.set("trust proxy", 1);
 }
 
-// Add security-related response headers.
 app.use(helmet());
-
-// Limit JSON request body size.
 app.use(express.json({ limit: "20kb" }));
 
-// Check the origin of requests that can change data.
-// This is an additional CSRF defense alongside SameSite cookies.
+// Check the origin of requests that change data.
 app.use((req, res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     return next();
   }
 
   const origin = req.get("Origin");
+
   const allowedOrigin = isProduction
     ? process.env.APP_ORIGIN
     : "http://localhost:5173";
@@ -59,7 +56,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Store login sessions in PostgreSQL.
+// PostgreSQL-backed login sessions.
 app.use(
   session({
     name: "trustvault.sid",
@@ -90,7 +87,7 @@ const loginLimiter = rateLimit({
   }
 });
 
-// Limit automated registration attempts.
+// Limit account registrations.
 const registrationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 10,
@@ -101,7 +98,7 @@ const registrationLimiter = rateLimit({
   }
 });
 
-// Health check.
+// API routes.
 app.get("/api/health", (req, res) => {
   res.json({
     message: "TrustVault backend is running",
@@ -109,17 +106,34 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Authentication and document routes.
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/register", registrationLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/admin", adminRoutes);
 
-// Start the server only when this file is run directly.
-// This allows Vitest and Supertest to import the app.
+// Serve the built React frontend in production.
+const frontendDist = path.join(__dirname, "../frontend/dist");
+
+if (isProduction) {
+  if (!fs.existsSync(frontendDist)) {
+    throw new Error(
+      "Frontend build not found. Run npm run build in frontend."
+    );
+  }
+
+  app.use(express.static(frontendDist));
+
+  // React single-page application fallback.
+  app.get("/{*path}", (req, res) => {
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+}
+
+// Start only when running directly.
+// Security tests can import the app without starting a server.
 if (require.main === module) {
-  app.listen(PORT, () => {
+  app.listen(PORT, "0.0.0.0", () => {
     console.log(`TrustVault server running on port ${PORT}`);
   });
 }
