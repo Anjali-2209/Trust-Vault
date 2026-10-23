@@ -787,4 +787,10 @@ a { text-decoration: none; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+}/* Admin audit logs */
+.audit-denied {
+  background: #ffe3e8;
+  color: #b41a35;
 }
+#audit-logs { scroll-margin-top: 20px; }
+#audit-logs .documents-table td { white-space: nowrap; }

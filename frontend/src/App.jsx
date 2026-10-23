@@ -63,6 +63,22 @@ export default function App() {
   const [filter, setFilter] = useState("all");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditError, setAuditError] = useState("");
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotal, setAuditTotal] = useState(0);
+
+  async function loadAuditLogs(page = 1) {
+    try {
+      setAuditError("");
+      const data = await request(`/admin/audit-logs?page=${page}`);
+      setAuditLogs(data.logs || []);
+      setAuditPage(data.page || page);
+      setAuditTotal(data.total || 0);
+    } catch (error) {
+      setAuditError(error.message);
+    }
+  }
 
   async function loadDocuments() {
     const data = await request("/documents");
@@ -72,10 +88,16 @@ export default function App() {
   useEffect(() => {
     request("/auth/me")
       .then(async (data) => {
-        if (data.user) {
-          setUser(data.user);
+        if (!data.user) return;
+        setUser(data.user);
+        try {
           const result = await request("/documents");
           setDocuments(result.documents || []);
+        } catch (error) {
+          setMessage(error.message);
+        }
+        if (data.user.role === "admin") {
+          await loadAuditLogs();
         }
       })
       .catch(() => {});
@@ -96,6 +118,9 @@ export default function App() {
       setUser(data.user);
       setPassword("");
       await loadDocuments();
+      if (data.user.role === "admin") {
+  await loadAuditLogs();
+}
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -108,6 +133,10 @@ export default function App() {
       await request("/auth/logout", { method: "POST" });
       setUser(null);
       setDocuments([]);
+      setAuditLogs([]);
+      setAuditError("");
+      setAuditPage(1);
+      setAuditTotal(0);
       setMessage("");
     } catch (error) {
       setMessage(error.message);
@@ -338,6 +367,12 @@ export default function App() {
           <a href="#documents" onClick={() => setFilter("shared")}>
             <Icon name="users"/> Shared With Me
           </a>
+
+          {user.role === "admin" && (
+            <a href="#audit-logs" onClick={() => loadAuditLogs()}>
+              <Icon name="clock"/> Audit Logs
+            </a>
+          )}
         </nav>
 
         <div className="sidebar-bottom">
@@ -605,6 +640,68 @@ export default function App() {
             </table>
           </div>
         </section>
+
+        {user.role === "admin" && (
+          <section className="content-panel" id="audit-logs">
+            <div className="section-heading">
+              <span className="heading-icon"><Icon name="clock" /></span>
+              <div>
+                <h2>Admin Audit Logs</h2>
+                <p>Review recorded document activity and access decisions</p>
+              </div>
+            </div>
+
+            <div className="table-toolbar">
+              <span>Showing page {auditPage} of {Math.max(1, Math.ceil(auditTotal / 25))} · {auditTotal} records</span>
+              <button className="refresh-btn" onClick={() => loadAuditLogs(auditPage)}>
+                Refresh Audit Logs
+              </button>
+            </div>
+
+            {auditError && <p className="message" role="alert">{auditError}</p>}
+
+            <div className="table-scroll">
+              <table className="documents-table">
+                <thead>
+                  <tr>
+                    <th>Date &amp; Time</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Document ID</th>
+                    <th>Outcome</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td>{new Date(log.occurred_at).toLocaleString()}</td>
+                      <td>{log.actor_email || log.actor_name || "Unknown"}</td>
+                      <td><span className="category-pill">{log.action}</span></td>
+                      <td>{log.document_id ?? "—"}</td>
+                      <td>
+                        <span className={log.outcome === "allowed"
+                          ? "access-pill access-shared"
+                          : "access-pill audit-denied"}>
+                          {log.outcome}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {auditLogs.length === 0 && (
+                    <tr><td colSpan="5" className="empty-state">No audit records on this page.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="table-toolbar" style={{ marginTop: 16 }}>
+              <button className="refresh-btn" disabled={auditPage <= 1}
+                onClick={() => loadAuditLogs(auditPage - 1)}>Previous</button>
+              <button className="refresh-btn" disabled={auditPage * 25 >= auditTotal}
+                onClick={() => loadAuditLogs(auditPage + 1)}>Next</button>
+            </div>
+          </section>
+        )}
 
         <section className="bottom-grid">
           <div className="content-panel">
