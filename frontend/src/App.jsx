@@ -54,8 +54,10 @@ function Icon({ name, size = 20 }) {
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+const [email, setEmail] = useState("");
+const [password, setPassword] = useState("");
+const [fullName, setFullName] = useState("");
+const [authView, setAuthView] = useState("welcome");
   const [documents, setDocuments] = useState([]);
   const [file, setFile] = useState(null);
   const [category, setCategory] = useState("college");
@@ -127,6 +129,40 @@ export default function App() {
       setBusy(false);
     }
   }
+  
+  async function register(event) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+
+    if (password.length < 12) {
+      setMessage("Password must be at least 12 characters.");
+      setBusy(false);
+      return;
+    }
+
+    try {
+      await request("/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: fullName.trim(),
+          email: email.trim(),
+          password,
+        }),
+      });
+
+      setPassword("");
+      setFullName("");
+      setMessage("Registration successful! Please sign in.");
+      setAuthView("login");
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
 
   async function logout() {
     try {
@@ -280,6 +316,161 @@ export default function App() {
 
     return matchesSearch && matchesFilter;
   });
+
+if (!user && authView === "welcome") {
+  return (
+    <main className="login-page">
+      <div className="login-layout">
+        <section className="login-intro">
+          <div className="brand-mark">
+            <Icon name="shield" size={34} />
+            <span>Trust<span className="red">Vault</span></span>
+          </div>
+
+          <h1>Your documents.<br />Your control.</h1>
+          <p>
+            A secure workspace for storing documents, sharing access,
+            and managing permissions.
+          </p>
+
+          <div className="login-features">
+            <span><Icon name="lock" /> Controlled access</span>
+            <span><Icon name="users" /> Role-based sharing</span>
+            <span><Icon name="shield" /> Protected documents</span>
+          </div>
+        </section>
+
+        <section className="login-card">
+          <div className="login-icon">
+            <Icon name="shield" size={28} />
+          </div>
+
+          <h2>Welcome to TrustVault</h2>
+          <p>Securely manage and share your documents.</p>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMessage("");
+              setAuthView("login");
+            }}
+          >
+            Login →
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMessage("");
+              setAuthView("register");
+            }}
+          >
+            Create Account →
+          </button>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+if (!user && authView === "register") {
+  return (
+    <main className="login-page">
+      <div className="login-layout">
+        <section className="login-intro">
+          <div className="brand-mark">
+            <Icon name="shield" size={34} />
+            <span>Trust<span className="red">Vault</span></span>
+          </div>
+
+          <h1>Your documents.<br />Your control.</h1>
+          <p>
+            Create your account to securely manage and share documents.
+          </p>
+
+          <div className="login-features">
+            <span><Icon name="lock" /> Controlled access</span>
+            <span><Icon name="users" /> Role-based sharing</span>
+            <span><Icon name="shield" /> Protected documents</span>
+          </div>
+        </section>
+
+        <form className="login-card" onSubmit={register}>
+          <div className="login-icon">
+            <Icon name="users" size={28} />
+          </div>
+
+          <h2>Create Account</h2>
+          <p>Join TrustVault securely.</p>
+
+          <label htmlFor="register-name">Full name</label>
+          <input
+            id="register-name"
+            type="text"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            placeholder="Your full name"
+            autoComplete="name"
+            required
+          />
+
+          <label htmlFor="register-email">Email address</label>
+          <input
+            id="register-email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="you@example.com"
+            autoComplete="email"
+            required
+          />
+
+          <label htmlFor="register-password">Password</label>
+          <input
+            id="register-password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="At least 12 characters"
+            autoComplete="new-password"
+            minLength={12}
+            required
+          />
+
+          <button disabled={busy} type="submit">
+            {busy ? "Creating account..." : "Register →"}
+          </button>
+
+          {message && <p className="message" role="alert">{message}</p>}
+
+          <p>
+            Already have an account?{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setMessage("");
+                setAuthView("login");
+              }}
+            >
+              Sign in
+            </button>
+          </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMessage("");
+              setAuthView("welcome");
+            }}
+          >
+            ← Back
+          </button>
+        </form>
+      </div>
+    </main>
+  );
+}
+
 
   if (!user) {
     return (
