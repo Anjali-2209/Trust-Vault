@@ -724,11 +724,20 @@ a { text-decoration: none; }
   font-weight: 700;
 }
 
-.login-card input {
+
+.login-card input,
+.login-card select {
+  width: 100%;
   padding: 13px;
   border: 1px solid #d7dee6;
   border-radius: 9px;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background-color: #fff;
+  box-sizing: border-box;
 }
+
 
 .login-card button {
   padding: 14px;

@@ -6,23 +6,26 @@ const pool = require("./db");
 const router = express.Router();
 
 // Register a new viewer account.
+
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password } = req.body || {};
+    const { name, email, password, role } = req.body || {};
 
     if (
       typeof name !== "string" ||
       typeof email !== "string" ||
       typeof password !== "string" ||
+      typeof role !== "string" ||
+      !["owner", "viewer"].includes(role) ||
       name.trim().length < 2 ||
       name.trim().length > 100 ||
-      email.length > 255 ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      email.trim().length > 255 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ||
       Buffer.byteLength(password, "utf8") < 12 ||
       Buffer.byteLength(password, "utf8") > 128
     ) {
       return res.status(400).json({
-        error: "Enter a valid name, email and password of 12-128 bytes"
+        error: "Enter a valid name, email, password of 12-128 bytes, and role of owner or viewer"
       });
     }
 
@@ -31,9 +34,9 @@ router.post("/register", async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO users (name, email, password_hash, role)
-       VALUES ($1, $2, $3, 'viewer')
+       VALUES ($1, $2, $3, $4)
        RETURNING id, name, email, role`,
-      [name.trim(), normalizedEmail, passwordHash]
+      [name.trim(), normalizedEmail, passwordHash, role]
     );
 
     return res.status(201).json({
@@ -53,6 +56,7 @@ router.post("/register", async (req, res) => {
     });
   }
 });
+
 
 // Login with email and password.
 router.post("/login", async (req, res) => {

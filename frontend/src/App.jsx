@@ -58,6 +58,7 @@ const [email, setEmail] = useState("");
 const [password, setPassword] = useState("");
 const [fullName, setFullName] = useState("");
 const [authView, setAuthView] = useState("welcome");
+const [role, setRole] = useState("viewer");
   const [documents, setDocuments] = useState([]);
   const [file, setFile] = useState(null);
   const [category, setCategory] = useState("college");
@@ -129,39 +130,41 @@ const [authView, setAuthView] = useState("welcome");
       setBusy(false);
     }
   }
-  
-  async function register(event) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
+async function register(event) {
+  event.preventDefault();
+  setBusy(true);
+  setMessage("");
 
-    if (password.length < 12) {
-      setMessage("Password must be at least 12 characters.");
-      setBusy(false);
-      return;
-    }
-
-    try {
-      await request("/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: fullName.trim(),
-          email: email.trim(),
-          password,
-        }),
-      });
-
-      setPassword("");
-      setFullName("");
-      setMessage("Registration successful! Please sign in.");
-      setAuthView("login");
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setBusy(false);
-    }
+  if (password.length < 12) {
+    setMessage("Password must be at least 12 characters.");
+    setBusy(false);
+    return;
   }
+
+  try {
+    await request("/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: fullName.trim(),
+        email: email.trim(),
+        password,
+        role,
+      }),
+    });
+
+    setPassword("");
+    setFullName("");
+    setRole("viewer");
+    setMessage("Registration successful! Please sign in.");
+    setAuthView("login");
+  } catch (error) {
+    setMessage(error.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
 
 
   async function logout() {
@@ -424,6 +427,17 @@ if (!user && authView === "register") {
             autoComplete="email"
             required
           />
+
+          <label htmlFor="register-role">Choose your role</label>          <select
+            id="register-role"
+            value={role}
+            onChange={(event) => setRole(event.target.value)}
+            required
+          >
+            <option value="viewer">Viewer — Access shared documents</option>
+            <option value="owner">Owner — Upload and share documents</option>
+          </select>
+
 
           <label htmlFor="register-password">Password</label>
           <input
